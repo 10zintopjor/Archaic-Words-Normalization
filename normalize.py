@@ -14,16 +14,15 @@ def extract_collated(c_text,archaic_words):
     for m in p.finditer(c_text):
         note = m.group()
         start,end = m.span()
-        modern_word = get_modern_word(note)
         index = get_main_word(c_text,start-1)
         main_word = c_text[index:start]
-        
+        alt_words = get_alternative_word(note,main_word)
         if main_word in archaic_words:
-            new_str+=c_text[start_in:index-1]+modern_word
+            new_str+=c_text[start_in:index-1]+alt_words[0]
         else:
-            in_modern_word = check_lekshi_gurkhang(modern_word)
-            if in_modern_word != None:
-                new_str+=c_text[start_in:index-1]+in_modern_word    
+            mod_word = check_lekshi_gurkhang(alt_words)
+            if mod_word != None:
+                new_str+=c_text[start_in:index-1]+mod_word    
             else:
                 new_str+=c_text[start_in:end]    
         start_in = end+1
@@ -32,34 +31,47 @@ def extract_collated(c_text,archaic_words):
         f.write(new_str)
 
 
-def check_lekshi_gurkhang(word):
+def check_lekshi_gurkhang(words):
     a_yaml_file = open("arch_modern.yml")
     parsed_yaml_file = yaml.load(a_yaml_file, Loader=yaml.FullLoader)
 
     for id in parsed_yaml_file:
-        if parsed_yaml_file[id]['archaic'] == word:
-            return parsed_yaml_file[id]['modern'][0] # it is list 
+        for word in words:
+            if parsed_yaml_file[id]['archaic'] == word:
+                return parsed_yaml_file[id]['modern'][0] # it is list 
+            else:
+                modern_words = parsed_yaml_file[id]['modern']
+                for modern_word in modern_words:
+                    if modern_word == word:
+                        return word
 
     return None        
 
 
-def get_modern_word(note):
+def get_alternative_word(note,main_word):
+    words =[]
+    print(note)
     if re.search("»«",note):
         text = re.match(".*»(.*)\s*>",note)
-        return text.group(1)
-    elif re.search("<«.*».*«.*».*།>",note):
+        words.append(text.group(1).strip())
+    elif re.search("<«.*».*«.*».*>",note):
         text = re.match(".*<«.*»(.*)«.*»(.*)>",note)
         if text.group(1) != text.group(2):
-            first_word = check_lekshi_gurkhang(text.group(1))
-            second_word = check_lekshi_gurkhang(text.group(2))
-            if first_word != None:
-                return first_word
+            first_word =text.group(1).strip()
+            second_word = text.group(2).strip()
+            if first_word != main_word and second_word !=main_word:
+                words.append(first_word)
+                words.append(second_word)
+            elif first_word != main_word:
+                words.append(first_word)
             elif second_word != None:
-                return second_word
-            else:
-                return text.group(1)+"_"+text.group(2)
+                words.append(second_word)
         else:
-            return text.group(1)
+            words.append(text.group(1).strip())
+    elif re.search("<«.*».*>",note):
+        text = re.match(".*<«.*»(.*)>",note)
+        words.append(text.group(1).strip())        
+    return words
 
 def get_main_word(c_text,start):
     index = start
@@ -72,6 +84,7 @@ def get_main_word(c_text,start):
                 index_in-=1
             return index_in+1
         index-=1
+
 
 def extract_db():
     archaic_words = []
