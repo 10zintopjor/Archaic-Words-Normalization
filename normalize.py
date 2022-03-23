@@ -1,34 +1,33 @@
-from asyncio import start_unix_server
-from calendar import c
+from cgitb import text
 from pathlib import Path
+from botok.tokenizers.wordtokenizer import WordTokenizer
 import re
 import sqlite3
 import csv
 import yaml
 
-def extract_collated(c_text,archaic_words):
+
+def extract_collated(collated_text,archaic_words):
     p = re.compile("\d+\s*<[^>]*>")
-    new_str=""
+    new_collated_text=""
     start_in = 0
-    #notes = re.findall("\d+\s*<.+>",c_text)
-    for m in p.finditer(c_text):
+    for m in p.finditer(collated_text):
         note = m.group()
         start,end = m.span()
-        index = get_main_word(c_text,start-1)
-        main_word = c_text[index:start]
-        alt_words = get_alternative_word(note,main_word)
-        if main_word in archaic_words:
-            new_str+=c_text[start_in:index-1]+alt_words[0]
+        default_word,index = get_default_word(collated_text,start-1)
+        alt_words = get_alternative_words(note,default_word)
+        if default_word in archaic_words:
+            new_collated_text+=collated_text[start_in:index-1]+alt_words[0]
         else:
-            mod_word = check_lekshi_gurkhang(alt_words)
-            if mod_word != None:
-                new_str+=c_text[start_in:index-1]+mod_word    
+            modern_word = check_lekshi_gurkhang(alt_words)
+            if modern_word != None:
+                new_collated_text+=collated_text[start_in:index-1]+modern_word    
             else:
-                new_str+=c_text[start_in:end]    
+                new_collated_text+=collated_text[start_in:end]    
         start_in = end+1
 
     with open("new_test.txt","w") as f:
-        f.write(new_str)
+        f.write(new_collated_text)
 
 
 def check_lekshi_gurkhang(words):
@@ -48,10 +47,20 @@ def check_lekshi_gurkhang(words):
     return None        
 
 
-def get_alternative_word(note,main_word):
+def get_alternative_words(note,default_word):
     words =[]
     print(note)
-    if re.search("»«",note):
+    regex = "»([^(«|>)]*)"
+    texts = re.findall(regex,note)
+
+    for text in texts:
+        if text == "":
+            continue
+        words.append(text)
+
+    return words
+
+    """ if re.search("»«",note):
         text = re.match(".*»(.*)\s*>",note)
         words.append(text.group(1).strip())
     elif re.search("<«.*».*«.*».*>",note):
@@ -59,10 +68,10 @@ def get_alternative_word(note,main_word):
         if text.group(1) != text.group(2):
             first_word =text.group(1).strip()
             second_word = text.group(2).strip()
-            if first_word != main_word and second_word !=main_word:
+            if first_word != default_word and second_word != default_word:
                 words.append(first_word)
                 words.append(second_word)
-            elif first_word != main_word:
+            elif first_word != default_word:
                 words.append(first_word)
             elif second_word != None:
                 words.append(second_word)
@@ -70,20 +79,25 @@ def get_alternative_word(note,main_word):
             words.append(text.group(1).strip())
     elif re.search("<«.*».*>",note):
         text = re.match(".*<«.*»(.*)>",note)
-        words.append(text.group(1).strip())        
-    return words
+        words.append(text.group(1).strip())  """       
 
-def get_main_word(c_text,start):
+
+def get_default_word(collated_text,start):
     index = start
+    new_index = ""
     while index > 0:
-        if c_text[index] == ":":
-            return index+1
-        elif re.search("\s",c_text[index]):
+        if collated_text[index] == ":":
+            new_index =  index+1
+            break
+        elif re.search("\s",collated_text[index]):
             index_in = start-1
-            while c_text[index_in] != "་":
+            while collated_text[index_in] != "་":
                 index_in-=1
-            return index_in+1
+            new_index = index_in+1
+            break
         index-=1
+
+    return collated_text[new_index:start+1],new_index
 
 
 def extract_db():
@@ -103,11 +117,29 @@ def extract_db():
     return archaic_words
 
 
+def remove_particles(collated_text):
+    
+    wt = WordTokenizer()
+    tokenized_texts = wt.tokenize(collated_text,split_affixes=True)
+    
+    particle_free_collated_text = ""
+
+    for tokenized_text in tokenized_texts:
+        print(tokenized_text.pos)
+        print("*******************")
+        if tokenized_text.pos and tokenized_text.pos != "PART":
+            particle_free_collated_text+=tokenized_text.text
+    
+    return particle_free_collated_text
+
 def main():
-    c_text = Path("sample_collated.txt").read_text(encoding="utf-8")
+    collated_text = Path("sample_collated.txt").read_text(encoding="utf-8")
     #archaic_words = extract_db()
     archaic_words = ['བཞི་བྱུང་','ཙམ་བླང་གི']
-    extract_collated(c_text,archaic_words)
+    collated_text = remove_particles(collated_text)
+    print(collated_text)
+    #extract_collated(collated_text,archaic_words)
+
 
 if __name__ == "__main__":
     main()
